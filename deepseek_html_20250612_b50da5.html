@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Upload para Google Drive</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      text-align: center;
+    }
+    button {
+      background: #4285F4;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px;
+    }
+    button:hover {
+      background: #3367D6;
+    }
+    #fileInput {
+      display: none;
+    }
+    #status {
+      margin: 20px 0;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .success {
+      background: #E6F4EA;
+      color: #137333;
+    }
+    .error {
+      background: #FCE8E6;
+      color: #D93025;
+    }
+  </style>
+</head>
+<body>
+  <h1>Upload para Google Drive</h1>
+  <button id="authBtn">Login com Google</button>
+  <div id="uploadDiv" style="display:none">
+    <input type="file" id="fileInput">
+    <button id="uploadBtn">Enviar Arquivo</button>
+  </div>
+  <div id="status"></div>
+
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script>
+    const CLIENT_ID = '810401701542-m536tjc3t5eelisikh36dtjt938s88be.apps.googleusercontent.com';
+    const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+    
+    let googleAuth;
+
+    function handleClientLoad() {
+      gapi.load('client:auth2', initClient);
+    }
+
+    function initClient() {
+      gapi.client.init({
+        clientId: CLIENT_ID,
+        scope: SCOPE
+      }).then(function() {
+        googleAuth = gapi.auth2.getAuthInstance();
+        updateSigninStatus();
+        googleAuth.isSignedIn.listen(updateSigninStatus);
+      });
+    }
+
+    function updateSigninStatus() {
+      const user = googleAuth.currentUser.get();
+      const isAuthorized = user.hasGrantedScopes(SCOPE);
+      
+      if (isAuthorized) {
+        document.getElementById('authBtn').style.display = 'none';
+        document.getElementById('uploadDiv').style.display = 'block';
+        document.getElementById('status').textContent = 'Pronto para enviar arquivos!';
+        document.getElementById('status').className = 'success';
+      } else {
+        document.getElementById('authBtn').style.display = 'block';
+        document.getElementById('uploadDiv').style.display = 'none';
+      }
+    }
+
+    function handleAuthClick() {
+      const authUrl = googleAuth.currentUser.get().getAuthResponse(true).login_url;
+      const width = 500;
+      const height = 600;
+      const left = (screen.width - width) / 2;
+      const top = (screen.height - height) / 2;
+      
+      window.open(authUrl, 'googleAuthWindow', 
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes,status=yes`);
+    }
+
+    function handleUploadClick() {
+      document.getElementById('fileInput').click();
+    }
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const statusDiv = document.getElementById('status');
+      statusDiv.textContent = 'Enviando arquivo...';
+      statusDiv.className = '';
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result.split(',')[1];
+        
+        const fileMetadata = {
+          name: file.name,
+          mimeType: file.type
+        };
+
+        const media = {
+          mimeType: file.type,
+          body: content
+        };
+
+        gapi.client.drive.files.create({
+          resource: fileMetadata,
+          media: media,
+          fields: 'id,name'
+        }).then(function(response) {
+          statusDiv.textContent = `Arquivo "${response.result.name}" enviado com sucesso!`;
+          statusDiv.className = 'success';
+        }).catch(function(error) {
+          statusDiv.textContent = `Erro: ${error.result.error.message}`;
+          statusDiv.className = 'error';
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.getElementById('authBtn').addEventListener('click', handleAuthClick);
+    document.getElementById('uploadBtn').addEventListener('click', handleUploadClick);
+    document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+
+    window.onload = handleClientLoad;
+
+    window.addEventListener('message', function(event) {
+      if (event.origin === "https://accounts.google.com" || event.origin === "https://content.googleapis.com") {
+        if (event.data === 'auth_complete') {
+          googleAuth.currentUser.get().reloadAuthResponse().then(updateSigninStatus);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
